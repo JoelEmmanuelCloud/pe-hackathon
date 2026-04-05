@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def create_app():
+def create_app(db=None):
     app = Flask(__name__)
 
     handler = logging.StreamHandler()
@@ -21,7 +21,8 @@ def create_app():
     root_logger.setLevel(logging.INFO)
 
     from app.database import database_proxy, get_db
-    db = get_db()
+    if db is None:
+        db = get_db()
     database_proxy.initialize(db)
 
     @app.before_request

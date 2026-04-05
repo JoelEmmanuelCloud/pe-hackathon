@@ -13,17 +13,15 @@ os.environ.setdefault("DB_PORT", "5432")
 
 @pytest.fixture(scope="session")
 def app():
-    from app.database import database_proxy
     from app.models.user import User
     from app.models.url import Url
     from app.models.event import Event
 
-    database_proxy.initialize(TEST_DB)
     TEST_DB.connect()
     TEST_DB.create_tables([User, Url, Event])
 
     from app import create_app
-    flask_app = create_app()
+    flask_app = create_app(db=TEST_DB)
     flask_app.config["TESTING"] = True
     yield flask_app
 
@@ -41,7 +39,11 @@ def clean_db():
     from app.models.user import User
     from app.models.url import Url
     from app.models.event import Event
+    if TEST_DB.is_closed():
+        TEST_DB.connect()
     yield
+    if TEST_DB.is_closed():
+        TEST_DB.connect()
     Event.delete().execute()
     Url.delete().execute()
     User.delete().execute()
