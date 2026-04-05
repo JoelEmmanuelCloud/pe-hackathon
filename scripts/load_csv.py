@@ -117,5 +117,7 @@ if __name__ == "__main__":
         load_users(users_csv)
         load_urls(urls_csv)
         load_events(events_csv)
-
+        db.execute_sql("SELECT setval('users_id_seq', (SELECT MAX(id) FROM users))")
+        db.execute_sql("SELECT setval('urls_id_seq', (SELECT MAX(id) FROM urls))")
+        db.execute_sql("SELECT setval('events_id_seq', (SELECT MAX(id) FROM events))")
     print("Done! Seed data loaded.")
