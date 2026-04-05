@@ -13,10 +13,12 @@ os.environ.setdefault("DB_PORT", "5432")
 
 @pytest.fixture(scope="session")
 def app():
+    from app.database import database_proxy
     from app.models.user import User
     from app.models.url import Url
     from app.models.event import Event
 
+    database_proxy.initialize(TEST_DB)
     TEST_DB.connect()
     TEST_DB.create_tables([User, Url, Event])
 

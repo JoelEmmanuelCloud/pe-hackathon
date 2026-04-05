@@ -1,7 +1,7 @@
 import logging
 import os
 from flask import Flask
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger import json as jsonlogger
 from dotenv import load_dotenv
 
 load_dotenv()
