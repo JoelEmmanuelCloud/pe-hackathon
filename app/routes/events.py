@@ -49,7 +49,7 @@ def list_events():
 
 @events_bp.route("/events", methods=["POST"])
 def create_event():
-    data = request.get_json(silent=True)
+    data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
 

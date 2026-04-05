@@ -38,7 +38,7 @@ def _url_to_dict(url):
 
 @urls_bp.route("/shorten", methods=["POST"])
 def shorten():
-    data = request.get_json(silent=True)
+    data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
 
@@ -125,7 +125,7 @@ def update_url(url_id):
     except Url.DoesNotExist:
         return jsonify({"error": "URL not found"}), 404
 
-    data = request.get_json(silent=True)
+    data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
 
@@ -243,7 +243,7 @@ def list_users():
 
 @urls_bp.route("/urls/bulk", methods=["POST"])
 def bulk_load_urls():
-    data = request.get_json(silent=True)
+    data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
 

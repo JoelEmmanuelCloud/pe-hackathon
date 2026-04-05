@@ -44,7 +44,7 @@ def get_user(user_id):
 
 @users_bp.route("/users", methods=["POST"])
 def create_user():
-    data = request.get_json(silent=True)
+    data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
 
@@ -73,7 +73,7 @@ def update_user(user_id):
     except User.DoesNotExist:
         return jsonify({"error": "User not found"}), 404
 
-    data = request.get_json(silent=True)
+    data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
 
@@ -101,7 +101,7 @@ def delete_user(user_id):
 
 @users_bp.route("/users/bulk", methods=["POST"])
 def bulk_load_users():
-    data = request.get_json(silent=True)
+    data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
 
