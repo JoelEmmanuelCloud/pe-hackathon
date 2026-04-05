@@ -59,12 +59,14 @@ def load_urls(filepath):
     with open(filepath, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
+    valid_user_ids = set(u.id for u in User.select(User.id))
+
     with db.atomic():
         for batch in chunked(rows, 100):
             data = [
                 {
                     "id": int(r["id"]),
-                    "user_id": int(r["user_id"]) if r.get("user_id") else None,
+                    "user_id": int(r["user_id"]) if r.get("user_id") and int(r["user_id"]) in valid_user_ids else None,
                     "short_code": r["short_code"],
                     "original_url": r["original_url"],
                     "title": r.get("title", ""),
@@ -83,20 +85,25 @@ def load_events(filepath):
     with open(filepath, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
+    valid_user_ids = set(u.id for u in User.select(User.id))
+    valid_url_ids = set(u.id for u in Url.select(Url.id))
+
     with db.atomic():
         for batch in chunked(rows, 100):
             data = [
                 {
                     "id": int(r["id"]),
                     "url_id": int(r["url_id"]),
-                    "user_id": int(r["user_id"]) if r.get("user_id") else None,
+                    "user_id": int(r["user_id"]) if r.get("user_id") and int(r["user_id"]) in valid_user_ids else None,
                     "event_type": r["event_type"],
                     "timestamp": parse_dt(r["timestamp"]),
                     "details": r.get("details", ""),
                 }
                 for r in batch
+                if int(r["url_id"]) in valid_url_ids
             ]
-            Event.insert_many(data).on_conflict_ignore().execute()
+            if data:
+                Event.insert_many(data).on_conflict_ignore().execute()
     print(f"  Loaded {len(rows)} events.")
 
 
