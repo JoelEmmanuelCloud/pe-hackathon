@@ -111,15 +111,53 @@ def redirect_url(short_code):
     return redirect(url.original_url, code=302)
 
 
+@urls_bp.route("/urls", methods=["POST"])
+def create_url():
+    return shorten()
+
+
+@urls_bp.route("/urls/<int:url_id>", methods=["PUT"])
+def update_url(url_id):
+    try:
+        url = Url.get_by_id(url_id)
+    except Url.DoesNotExist:
+        return jsonify({"error": "URL not found"}), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be JSON"}), 400
+
+    if "title" in data:
+        url.title = data["title"]
+    if "is_active" in data:
+        url.is_active = bool(data["is_active"])
+    if "original_url" in data:
+        url.original_url = data["original_url"]
+
+    url.updated_at = datetime.now()
+    url.save()
+
+    logger.info("URL updated", extra={"url_id": url_id})
+    return jsonify(_url_to_dict(url))
+
+
 @urls_bp.route("/urls")
 def list_urls():
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 20, type=int), 100)
+    user_id = request.args.get("user_id", type=int)
+    is_active = request.args.get("is_active")
 
     if page < 1 or per_page < 1:
         return jsonify({"error": "page and per_page must be positive integers"}), 400
 
     query = Url.select().order_by(Url.created_at.desc())
+
+    if user_id is not None:
+        query = query.where(Url.user == user_id)
+    if is_active is not None:
+        query = query.where(Url.is_active == (is_active.lower() in ("true", "1", "yes")))
+
     total = query.count()
     urls = list(query.paginate(page, per_page))
 
