@@ -1,6 +1,6 @@
 import csv
-import io
 import logging
+import os
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
@@ -104,6 +104,25 @@ def bulk_load_users():
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
+
+    file_name = data.get("file")
+    if file_name:
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        csv_path = os.path.join(base_dir, "data", file_name)
+        if not os.path.exists(csv_path):
+            return jsonify({"error": f"File not found: {file_name}"}), 404
+        created = 0
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                username = str(row.get("username", "")).strip()
+                email = str(row.get("email", "")).strip()
+                if not username or not email:
+                    continue
+                if not User.select().where(User.username == username).exists():
+                    User.create(username=username, email=email, created_at=datetime.now())
+                    created += 1
+        return jsonify({"created": created}), 201
 
     rows = data.get("rows") or data.get("users") or []
     if not rows:

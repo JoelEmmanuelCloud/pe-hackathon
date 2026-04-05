@@ -1,5 +1,7 @@
+import csv
 import json
 import logging
+import os
 import secrets
 import string
 from datetime import datetime
@@ -237,3 +239,81 @@ def list_users():
         }
         for u in users
     ])
+
+
+@urls_bp.route("/urls/bulk", methods=["POST"])
+def bulk_load_urls():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be JSON"}), 400
+
+    file_name = data.get("file")
+    if file_name:
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        csv_path = os.path.join(base_dir, "data", file_name)
+        if not os.path.exists(csv_path):
+            return jsonify({"error": f"File not found: {file_name}"}), 404
+        created = 0
+        valid_user_ids = set(u.id for u in User.select(User.id))
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                short_code = str(row.get("short_code", "")).strip()
+                original_url = str(row.get("original_url", "")).strip()
+                if not short_code or not original_url:
+                    continue
+                if Url.select().where(Url.short_code == short_code).exists():
+                    continue
+                raw_user_id = row.get("user_id")
+                try:
+                    user_id = int(raw_user_id) if raw_user_id else None
+                except (ValueError, TypeError):
+                    user_id = None
+                if user_id not in valid_user_ids:
+                    user_id = None
+                is_active_raw = str(row.get("is_active", "True")).strip().lower()
+                is_active = is_active_raw in ("true", "1", "yes")
+                created_at_raw = row.get("created_at")
+                updated_at_raw = row.get("updated_at")
+                try:
+                    created_at = datetime.fromisoformat(created_at_raw) if created_at_raw else datetime.now()
+                except ValueError:
+                    created_at = datetime.now()
+                try:
+                    updated_at = datetime.fromisoformat(updated_at_raw) if updated_at_raw else datetime.now()
+                except ValueError:
+                    updated_at = datetime.now()
+                Url.create(
+                    user=user_id,
+                    short_code=short_code,
+                    original_url=original_url,
+                    title=str(row.get("title", "")).strip(),
+                    is_active=is_active,
+                    created_at=created_at,
+                    updated_at=updated_at,
+                )
+                created += 1
+        return jsonify({"created": created}), 201
+
+    rows = data.get("rows") or data.get("urls") or []
+    if not rows:
+        return jsonify({"error": "rows or urls field required"}), 400
+
+    created = 0
+    for row in rows:
+        short_code = str(row.get("short_code", "")).strip()
+        original_url = str(row.get("original_url", "")).strip()
+        if not short_code or not original_url:
+            continue
+        if not Url.select().where(Url.short_code == short_code).exists():
+            Url.create(
+                short_code=short_code,
+                original_url=original_url,
+                title=row.get("title", ""),
+                is_active=bool(row.get("is_active", True)),
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            created += 1
+
+    return jsonify({"created": created}), 201
