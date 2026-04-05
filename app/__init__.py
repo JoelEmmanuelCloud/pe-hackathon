@@ -35,6 +35,11 @@ def create_app(db=None):
         if not db.is_closed():
             db.close()
 
+    from app.models.user import User
+    from app.models.url import Url
+    from app.models.event import Event
+    db.create_tables([User, Url, Event], safe=True)
+
     from app.routes import register_routes
     register_routes(app)
 
