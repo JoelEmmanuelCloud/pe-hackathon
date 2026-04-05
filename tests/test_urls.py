@@ -1,8 +1,6 @@
 import json
 
 
-# --- /shorten ---
-
 def test_shorten_creates_url(client, sample_user):
     response = client.post("/shorten", json={
         "original_url": "https://google.com",
@@ -39,8 +37,6 @@ def test_shorten_no_body_returns_400(client):
     assert response.status_code == 400
 
 
-# --- redirect ---
-
 def test_redirect_returns_302(client, sample_url):
     response = client.get(f"/{sample_url.short_code}")
     assert response.status_code == 302
@@ -62,8 +58,6 @@ def test_redirect_inactive_url_returns_410(client, sample_url):
     response = client.get(f"/{sample_url.short_code}")
     assert response.status_code == 410
 
-
-# --- /urls ---
 
 def test_list_urls_returns_200(client, sample_url):
     response = client.get("/urls")
@@ -90,10 +84,7 @@ def test_get_url_not_found(client):
     assert response.status_code == 404
 
 
-# --- /stats ---
-
 def test_stats_returns_click_count(client, sample_url):
-    # Simulate a click
     client.get(f"/{sample_url.short_code}")
     response = client.get(f"/stats/{sample_url.short_code}")
     assert response.status_code == 200
@@ -106,12 +97,9 @@ def test_stats_unknown_code_returns_404(client):
     assert response.status_code == 404
 
 
-# --- DELETE /urls/<id> ---
-
 def test_deactivate_url(client, sample_url):
     response = client.delete(f"/urls/{sample_url.id}")
     assert response.status_code == 200
-    # Confirm it's now inactive
     get_resp = client.get(f"/{sample_url.short_code}")
     assert get_resp.status_code == 410
 
@@ -121,8 +109,6 @@ def test_deactivate_nonexistent_url(client):
     assert response.status_code == 404
 
 
-# --- /users ---
-
 def test_list_users(client, sample_user):
     response = client.get("/users")
     assert response.status_code == 200
@@ -130,8 +116,6 @@ def test_list_users(client, sample_user):
     assert isinstance(data, list)
     assert any(u["username"] == "testuser" for u in data)
 
-
-# --- /metrics ---
 
 def test_metrics_endpoint(client):
     response = client.get("/metrics")

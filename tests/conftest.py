@@ -25,8 +25,6 @@ def app():
     from app import create_app
     flask_app = create_app(db=TEST_DB)
     flask_app.config["TESTING"] = True
-    # SQLite :memory: is destroyed when the connection closes.
-    # Prevent the teardown_appcontext hook in create_app from closing it.
     flask_app.teardown_appcontext_funcs.clear()
     yield flask_app
 
