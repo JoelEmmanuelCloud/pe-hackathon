@@ -83,6 +83,7 @@ def shorten():
         details=json.dumps({"short_code": short_code, "original_url": original_url}),
     )
 
+    cache_delete("url:list:1:20:None:None")
     logger.info("URL shortened", extra={"short_code": short_code, "original_url": original_url})
     return jsonify(_url_to_dict(url)), 201
 
@@ -170,6 +171,12 @@ def list_urls():
     if page < 1 or per_page < 1:
         return jsonify({"error": "page and per_page must be positive integers"}), 400
 
+    cache_key = f"url:list:{page}:{per_page}:{user_id}:{is_active}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        from flask import Response
+        return Response(cached, status=200, mimetype="application/json")
+
     query = Url.select().order_by(Url.created_at.desc())
 
     if user_id is not None:
@@ -180,12 +187,16 @@ def list_urls():
     total = query.count()
     urls = list(query.paginate(page, per_page))
 
-    return jsonify({
+    import json as _json
+    result = _json.dumps({
         "total": total,
         "page": page,
         "per_page": per_page,
         "urls": [_url_to_dict(u) for u in urls],
     })
+    cache_set(cache_key, result, ttl=5)
+    from flask import Response
+    return Response(result, status=200, mimetype="application/json")
 
 
 @urls_bp.route("/urls/<int:url_id>")
