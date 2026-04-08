@@ -25,7 +25,6 @@ def app():
 
     from app import create_app
 
-    # Use a fake in-memory Redis so tests don't need a real Redis instance
     fake_redis = MagicMock()
     fake_redis.get.return_value = None
     fake_redis.setex.return_value = True

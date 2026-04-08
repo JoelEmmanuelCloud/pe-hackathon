@@ -8,11 +8,10 @@ logger = logging.getLogger(__name__)
 _UNAVAILABLE = object()
 _client = None
 
-REDIRECT_TTL = int(os.getenv("CACHE_TTL", "300"))  # seconds
+REDIRECT_TTL = int(os.getenv("CACHE_TTL", "300"))
 
 
 def get_cache():
-    """Return a Redis client, or None if Redis is unavailable."""
     global _client
     if _client is _UNAVAILABLE:
         return None
@@ -32,7 +31,7 @@ def get_cache():
             logger.info("Redis cache connected", extra={"host": host, "port": port})
         except Exception as exc:
             logger.warning(
-                "Redis unavailable — caching disabled",
+                "Redis unavailable, caching disabled",
                 extra={"error": str(exc)},
             )
             _client = _UNAVAILABLE
