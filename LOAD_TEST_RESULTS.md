@@ -46,4 +46,10 @@ benefit most — a cache hit avoids a full DB query per click.
 - 2x Flask app instances behind Nginx (horizontal scaling)
 - Nginx round-robin load balancing
 - PostgreSQL shared DB
-- Redis available (not yet used for caching)
+- Redis caching on redirect lookups (TTL 300s) — eliminates DB query on every click
+
+## Fix Applied
+
+Redis caching was implemented on the `/<short_code>` redirect endpoint. Cache misses hit PostgreSQL
+and populate the cache; subsequent hits return immediately from Redis. Invalidation occurs on
+deactivation or URL update. The fix directly addresses the p(95) bottleneck identified above.

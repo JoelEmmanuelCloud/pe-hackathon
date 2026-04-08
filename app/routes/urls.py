@@ -8,6 +8,7 @@ from datetime import datetime
 
 from flask import Blueprint, jsonify, redirect, request
 
+from app.cache import cache_delete, cache_get, cache_set, redirect_cache_key
 from app.models.event import Event
 from app.models.url import Url
 from app.models.user import User
@@ -91,14 +92,29 @@ def redirect_url(short_code):
     if not short_code or len(short_code) > 20:
         return jsonify({"error": "Invalid short code"}), 400
 
+    cache_key = redirect_cache_key(short_code)
+    cached = cache_get(cache_key)
+    if cached is not None:
+        if cached == "INACTIVE":
+            return jsonify({"error": "URL is no longer active"}), 410
+        if cached == "NOT_FOUND":
+            return jsonify({"error": "URL not found"}), 404
+        TOTAL_REDIRECTS.inc()
+        logger.info("URL redirected (cache hit)", extra={"short_code": short_code, "destination": cached})
+        return redirect(cached, code=302)
+
     try:
         url = Url.get(Url.short_code == short_code)
     except Url.DoesNotExist:
+        cache_set(cache_key, "NOT_FOUND", ttl=60)
         logger.warning("Short code not found", extra={"short_code": short_code})
         return jsonify({"error": "URL not found"}), 404
 
     if not url.is_active:
+        cache_set(cache_key, "INACTIVE", ttl=60)
         return jsonify({"error": "URL is no longer active"}), 410
+
+    cache_set(cache_key, url.original_url)
 
     Event.create(
         url=url,
@@ -109,7 +125,7 @@ def redirect_url(short_code):
     )
 
     TOTAL_REDIRECTS.inc()
-    logger.info("URL redirected", extra={"short_code": short_code, "destination": url.original_url})
+    logger.info("URL redirected (cache miss)", extra={"short_code": short_code, "destination": url.original_url})
     return redirect(url.original_url, code=302)
 
 
@@ -139,6 +155,7 @@ def update_url(url_id):
     url.updated_at = datetime.now()
     url.save()
 
+    cache_delete(redirect_cache_key(url.short_code))
     logger.info("URL updated", extra={"url_id": url_id})
     return jsonify(_url_to_dict(url))
 
@@ -190,6 +207,8 @@ def deactivate_url(url_id):
     url.is_active = False
     url.updated_at = datetime.now()
     url.save()
+
+    cache_delete(redirect_cache_key(url.short_code))
 
     Event.create(
         url=url,

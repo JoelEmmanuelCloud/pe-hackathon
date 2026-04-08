@@ -1,4 +1,5 @@
 import os
+from unittest.mock import MagicMock, patch
 import pytest
 from peewee import SqliteDatabase
 
@@ -23,10 +24,18 @@ def app():
     TEST_DB.create_tables([User, Url, Event])
 
     from app import create_app
-    flask_app = create_app(db=TEST_DB)
-    flask_app.config["TESTING"] = True
-    flask_app.teardown_appcontext_funcs.clear()
-    yield flask_app
+
+    fake_redis = MagicMock()
+    fake_redis.get.return_value = None
+    fake_redis.setex.return_value = True
+    fake_redis.delete.return_value = True
+    fake_redis.ping.return_value = True
+
+    with patch("app.cache._client", fake_redis):
+        flask_app = create_app(db=TEST_DB)
+        flask_app.config["TESTING"] = True
+        flask_app.teardown_appcontext_funcs.clear()
+        yield flask_app
 
     TEST_DB.drop_tables([User, Url, Event])
     TEST_DB.close()
