@@ -26,7 +26,7 @@ Monitoring: Prometheus (9090) → Grafana (3000)
 
 ```bash
 # 1. Clone & enter
-git clone https://github.com/JoelEmmanuelCloud/pe-hackathon.git
+git clone https://github.com/JoelEmmanuelCloud/pe-hackathon
 cd pe-hackathon-2026
 
 # 2. Install deps
