@@ -34,7 +34,7 @@ systemctl start docker
 
 ```bash
 # Clone repo
-git clone https://github.com/YOUR_USERNAME/pe-hackathon-2026.git /opt/pe-hackathon
+git clone https://github.com/JoelEmmanuelCloud/pe-hackathon/pe-hackathon-2026.git /opt/pe-hackathon
 cd /opt/pe-hackathon
 
 # Configure environment
