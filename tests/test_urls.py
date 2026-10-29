@@ -155,3 +155,28 @@ def test_update_accepts_https_url(client, sample_url):
     response = client.put(f"/urls/{sample_url.id}", json={"original_url": " https://example.com/new "})
     assert response.status_code == 200
     assert response.get_json()["original_url"] == "https://example.com/new"
+
+
+def test_rename_user_to_taken_username_returns_409(client, sample_user):
+    from app.models.user import User
+    other = User.create(username="other", email="other@example.com")
+    response = client.put(f"/users/{other.id}", json={"username": "testuser"})
+    assert response.status_code == 409
+    assert User.get_by_id(other.id).username == "other"
+
+
+def test_rename_user_to_own_username_is_allowed(client, sample_user):
+    response = client.put(f"/users/{sample_user.id}", json={"username": "testuser", "email": "test@example.com"})
+    assert response.status_code == 200
+
+
+def test_update_user_race_on_unique_returns_409(client, sample_user, monkeypatch):
+    from peewee import IntegrityError
+    from app.models.user import User
+
+    def fail(*args, **kwargs):
+        raise IntegrityError("duplicate key")
+
+    monkeypatch.setattr(User, "save", fail)
+    response = client.put(f"/users/{sample_user.id}", json={"username": "fresh"})
+    assert response.status_code == 409
