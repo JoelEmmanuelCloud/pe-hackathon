@@ -180,3 +180,23 @@ def test_update_user_race_on_unique_returns_409(client, sample_user, monkeypatch
     monkeypatch.setattr(User, "save", fail)
     response = client.put(f"/users/{sample_user.id}", json={"username": "fresh"})
     assert response.status_code == 409
+
+
+def test_delete_user_with_links_returns_409(client, sample_url, monkeypatch):
+    from peewee import IntegrityError
+    from app.models.user import User
+
+    def fail(*args, **kwargs):
+        raise IntegrityError("violates foreign key constraint")
+
+    monkeypatch.setattr(User, "delete_instance", fail)
+    response = client.delete(f"/users/{sample_url.user_id}")
+    assert response.status_code == 409
+
+
+def test_delete_user_without_links(client):
+    from app.models.user import User
+    user = User.create(username="lonely", email="lonely@example.com")
+    response = client.delete(f"/users/{user.id}")
+    assert response.status_code == 200
+    assert not User.select().where(User.id == user.id).exists()

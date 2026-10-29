@@ -110,7 +110,11 @@ def delete_user(user_id):
     except User.DoesNotExist:
         return jsonify({"error": "User not found"}), 404
 
-    user.delete_instance()
+    try:
+        with database_proxy.atomic():
+            user.delete_instance()
+    except IntegrityError:
+        return jsonify({"error": "User still owns links or events and cannot be deleted"}), 409
     logger.info("User deleted", extra={"user_id": user_id})
     return jsonify({"message": "User deleted"}), 200
 
