@@ -1,0 +1,318 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "PE Hackathon URL Shortener",
+    "version": "0.1.0",
+    "description": "Flask URL shortener with PostgreSQL storage, Redis caching, and Prometheus metrics. Two app instances run behind Nginx."
+  },
+  "servers": [{"url": "/"}],
+  "tags": [
+    {"name": "URLs", "description": "Create, look up, update, and deactivate short links"},
+    {"name": "Redirect", "description": "Follow a short link and read its click stats"},
+    {"name": "Users"},
+    {"name": "Events", "description": "Audit trail of created, clicked, and deactivated events"},
+    {"name": "Operations", "description": "Health and Prometheus metrics"}
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Operations"],
+        "summary": "Check database and cache status",
+        "responses": {
+          "200": {"description": "Database reachable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Health"}, "example": {"status": "ok", "db": "ok", "cache": "ok"}}}},
+          "503": {"description": "Database unreachable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Health"}, "example": {"status": "degraded", "db": "error", "cache": "ok"}}}}
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": ["Operations"],
+        "summary": "Prometheus metrics",
+        "responses": {"200": {"description": "Prometheus text format", "content": {"text/plain": {"schema": {"type": "string"}}}}}
+      }
+    },
+    "/shorten": {
+      "post": {
+        "tags": ["URLs"],
+        "summary": "Create a short link",
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ShortenRequest"}, "example": {"original_url": "https://mlh.io", "title": "MLH"}}}
+        },
+        "responses": {
+          "201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Url"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"description": "user_id does not exist", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/{short_code}": {
+      "get": {
+        "tags": ["Redirect"],
+        "summary": "Redirect to the original URL",
+        "description": "Returns a 302 to the original URL and records a click. Served from Redis when cached. The browser follows the redirect to another site, so Try it out here usually shows a network error; open the URL in a new tab instead, then check /stats.",
+        "parameters": [{"$ref": "#/components/parameters/ShortCode"}],
+        "responses": {
+          "302": {"description": "Redirect", "headers": {"Location": {"schema": {"type": "string"}}}},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "410": {"description": "Link has been deactivated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/stats/{short_code}": {
+      "get": {
+        "tags": ["Redirect"],
+        "summary": "Click count for a short link",
+        "parameters": [{"$ref": "#/components/parameters/ShortCode"}],
+        "responses": {
+          "200": {"description": "Stats", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Stats"}}}},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/urls": {
+      "get": {
+        "tags": ["URLs"],
+        "summary": "List short links, newest first",
+        "parameters": [
+          {"name": "page", "in": "query", "schema": {"type": "integer", "minimum": 1, "default": 1}},
+          {"name": "per_page", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}},
+          {"name": "user_id", "in": "query", "schema": {"type": "integer"}},
+          {"name": "is_active", "in": "query", "schema": {"type": "boolean"}}
+        ],
+        "responses": {
+          "200": {"description": "One page of links", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UrlPage"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"}
+        }
+      },
+      "post": {
+        "tags": ["URLs"],
+        "summary": "Create a short link (same as /shorten)",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ShortenRequest"}}}},
+        "responses": {
+          "201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Url"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"}
+        }
+      }
+    },
+    "/urls/{url_id}": {
+      "parameters": [{"name": "url_id", "in": "path", "required": true, "schema": {"type": "integer"}}],
+      "get": {
+        "tags": ["URLs"],
+        "summary": "Get a short link by id",
+        "responses": {
+          "200": {"description": "Found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Url"}}}},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "put": {
+        "tags": ["URLs"],
+        "summary": "Update a short link",
+        "description": "Clears the cached redirect, so the next visit uses the new values.",
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UrlUpdate"}, "example": {"title": "Updated title"}}}
+        },
+        "responses": {
+          "200": {"description": "Updated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Url"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "delete": {
+        "tags": ["URLs"],
+        "summary": "Deactivate a short link",
+        "description": "Sets is_active to false and clears the cached redirect. The short link then returns 410.",
+        "responses": {
+          "200": {"description": "Deactivated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Message"}}}},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "List up to 100 users, newest first",
+        "responses": {"200": {"description": "Users", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/User"}}}}}}
+      },
+      "post": {
+        "tags": ["Users"],
+        "summary": "Create a user",
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserCreate"}, "example": {"username": "demo", "email": "demo@example.com"}}}
+        },
+        "responses": {
+          "201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "409": {"description": "Username or email already exists", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/users/{user_id}": {
+      "parameters": [{"name": "user_id", "in": "path", "required": true, "schema": {"type": "integer"}}],
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get a user by id",
+        "responses": {
+          "200": {"description": "Found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "put": {
+        "tags": ["Users"],
+        "summary": "Update a user",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserCreate"}}}},
+        "responses": {
+          "200": {"description": "Updated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "delete": {
+        "tags": ["Users"],
+        "summary": "Delete a user",
+        "responses": {
+          "200": {"description": "Deleted", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Message"}}}},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "tags": ["Events"],
+        "summary": "List events, newest first",
+        "parameters": [
+          {"name": "page", "in": "query", "schema": {"type": "integer", "minimum": 1, "default": 1}},
+          {"name": "per_page", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}},
+          {"name": "url_id", "in": "query", "schema": {"type": "integer"}},
+          {"name": "user_id", "in": "query", "schema": {"type": "integer"}},
+          {"name": "event_type", "in": "query", "schema": {"type": "string", "example": "clicked"}}
+        ],
+        "responses": {
+          "200": {"description": "Events", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/Event"}}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"}
+        }
+      },
+      "post": {
+        "tags": ["Events"],
+        "summary": "Record an event",
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/EventCreate"}, "example": {"url_id": 1, "event_type": "shared"}}}
+        },
+        "responses": {
+          "201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Event"}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "ShortCode": {"name": "short_code", "in": "path", "required": true, "schema": {"type": "string", "maxLength": 20}, "example": "aB3xYz"}
+    },
+    "responses": {
+      "BadRequest": {"description": "Invalid input", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+      "NotFound": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+    },
+    "schemas": {
+      "Error": {"type": "object", "properties": {"error": {"type": "string"}}},
+      "Message": {"type": "object", "properties": {"message": {"type": "string"}}},
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string", "enum": ["ok", "degraded"]},
+          "db": {"type": "string", "enum": ["ok", "error"]},
+          "cache": {"type": "string", "enum": ["ok", "unavailable", "error"]}
+        }
+      },
+      "ShortenRequest": {
+        "type": "object",
+        "required": ["original_url"],
+        "properties": {
+          "original_url": {"type": "string", "format": "uri", "description": "Must start with http:// or https://"},
+          "title": {"type": "string"},
+          "user_id": {"type": "integer"}
+        }
+      },
+      "UrlUpdate": {
+        "type": "object",
+        "properties": {
+          "original_url": {"type": "string", "format": "uri"},
+          "title": {"type": "string"},
+          "is_active": {"type": "boolean"}
+        }
+      },
+      "Url": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "short_code": {"type": "string"},
+          "original_url": {"type": "string"},
+          "title": {"type": "string", "nullable": true},
+          "is_active": {"type": "boolean"},
+          "user_id": {"type": "integer", "nullable": true},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "UrlPage": {
+        "type": "object",
+        "properties": {
+          "total": {"type": "integer"},
+          "page": {"type": "integer"},
+          "per_page": {"type": "integer"},
+          "urls": {"type": "array", "items": {"$ref": "#/components/schemas/Url"}}
+        }
+      },
+      "Stats": {
+        "type": "object",
+        "properties": {
+          "short_code": {"type": "string"},
+          "original_url": {"type": "string"},
+          "title": {"type": "string", "nullable": true},
+          "is_active": {"type": "boolean"},
+          "click_count": {"type": "integer"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "UserCreate": {
+        "type": "object",
+        "required": ["username", "email"],
+        "properties": {"username": {"type": "string"}, "email": {"type": "string", "format": "email"}}
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "username": {"type": "string"},
+          "email": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "EventCreate": {
+        "type": "object",
+        "required": ["url_id", "event_type"],
+        "properties": {
+          "url_id": {"type": "integer"},
+          "event_type": {"type": "string"},
+          "user_id": {"type": "integer"},
+          "details": {"type": "object"}
+        }
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "url_id": {"type": "integer"},
+          "user_id": {"type": "integer", "nullable": true},
+          "event_type": {"type": "string"},
+          "timestamp": {"type": "string", "format": "date-time"},
+          "details": {"type": "string", "nullable": true}
+        }
+      }
+    }
+  }
+}

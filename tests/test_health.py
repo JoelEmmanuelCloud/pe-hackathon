@@ -69,3 +69,20 @@ def test_db_outage_returns_503_json(client, monkeypatch):
     response = client.get("/urls/1")
     assert response.status_code == 503
     assert response.get_json() == {"error": "database unavailable"}
+
+
+def test_docs_page_served(client):
+    response = client.get("/docs")
+    assert response.status_code == 200
+    assert b"swagger-ui" in response.data
+
+
+def test_openapi_spec_covers_routes(client, app):
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    documented = set(response.get_json()["paths"])
+    for rule in app.url_map.iter_rules():
+        if rule.endpoint in ("static", "docs.docs", "docs.openapi_spec") or rule.rule == "/urls/bulk" or rule.rule == "/users/bulk":
+            continue
+        path = rule.rule.replace("<int:", "{").replace("<", "{").replace(">", "}")
+        assert path in documented, path
