@@ -1,6 +1,7 @@
 import os
+import time
 import psutil
-from flask import Blueprint, Response
+from flask import Blueprint, Response, g, request
 from prometheus_client import (
     Counter, Histogram, Gauge,
     generate_latest, CONTENT_TYPE_LATEST,
@@ -25,6 +26,27 @@ ACTIVE_URLS = Gauge("active_urls_total", "Total active short URLs")
 TOTAL_REDIRECTS = Counter("url_redirects_total", "Total URL redirects")
 CPU_USAGE = Gauge("process_cpu_percent", "Process CPU usage percent")
 MEMORY_USAGE = Gauge("process_memory_bytes", "Process memory usage in bytes")
+CACHE_LOOKUPS = Counter(
+    "cache_lookups_total",
+    "Cache lookups by cache name and result",
+    ["cache", "result"],
+)
+
+
+@metrics_bp.before_app_request
+def start_timer():
+    g.request_start = time.perf_counter()
+
+
+@metrics_bp.after_app_request
+def record_request(response):
+    start = g.pop("request_start", None)
+    if start is None:
+        return response
+    endpoint = request.url_rule.rule if request.url_rule else "unmatched"
+    REQUEST_LATENCY.labels(request.method, endpoint).observe(time.perf_counter() - start)
+    REQUEST_COUNT.labels(request.method, endpoint, str(response.status_code)).inc()
+    return response
 
 
 @metrics_bp.route("/metrics")

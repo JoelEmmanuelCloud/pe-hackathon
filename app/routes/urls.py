@@ -12,7 +12,7 @@ from app.cache import cache_delete, cache_get, cache_set, redirect_cache_key
 from app.models.event import Event
 from app.models.url import Url
 from app.models.user import User
-from app.routes.metrics import TOTAL_REDIRECTS
+from app.routes.metrics import CACHE_LOOKUPS, TOTAL_REDIRECTS
 
 logger = logging.getLogger(__name__)
 urls_bp = Blueprint("urls", __name__)
@@ -96,6 +96,7 @@ def redirect_url(short_code):
     cache_key = redirect_cache_key(short_code)
     cached = cache_get(cache_key)
     if cached is not None:
+        CACHE_LOOKUPS.labels("redirect", "hit").inc()
         if cached == "INACTIVE":
             return jsonify({"error": "URL is no longer active"}), 410
         if cached == "NOT_FOUND":
@@ -104,6 +105,7 @@ def redirect_url(short_code):
         logger.info("URL redirected (cache hit)", extra={"short_code": short_code, "destination": cached})
         return redirect(cached, code=302)
 
+    CACHE_LOOKUPS.labels("redirect", "miss").inc()
     try:
         url = Url.get(Url.short_code == short_code)
     except Url.DoesNotExist:
@@ -174,8 +176,10 @@ def list_urls():
     cache_key = f"url:list:{page}:{per_page}:{user_id}:{is_active}"
     cached = cache_get(cache_key)
     if cached is not None:
+        CACHE_LOOKUPS.labels("list", "hit").inc()
         from flask import Response
         return Response(cached, status=200, mimetype="application/json")
+    CACHE_LOOKUPS.labels("list", "miss").inc()
 
     query = Url.select().order_by(Url.created_at.desc())
 

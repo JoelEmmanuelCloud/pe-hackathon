@@ -121,3 +121,12 @@ def test_metrics_endpoint(client):
     response = client.get("/metrics")
     assert response.status_code == 200
     assert b"http_requests_total" in response.data or b"process_cpu_percent" in response.data
+
+
+def test_metrics_records_requests(client, sample_url):
+    client.get(f"/{sample_url.short_code}")
+    response = client.get("/metrics")
+    body = response.data.decode()
+    assert 'http_requests_total{endpoint="/<short_code>",method="GET",status="302"}' in body
+    assert 'http_request_duration_seconds_count{endpoint="/<short_code>",method="GET"}' in body
+    assert 'cache_lookups_total{cache="redirect",result="miss"}' in body
