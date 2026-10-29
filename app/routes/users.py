@@ -4,7 +4,9 @@ import os
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
+from peewee import IntegrityError
 
+from app.database import database_proxy
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -78,11 +80,25 @@ def update_user(user_id):
         return jsonify({"error": "Request body must be JSON"}), 400
 
     if "username" in data:
-        user.username = data["username"].strip()
+        username = str(data["username"] or "").strip()
+        if not username:
+            return jsonify({"error": "username cannot be empty"}), 400
+        if User.select().where((User.username == username) & (User.id != user_id)).exists():
+            return jsonify({"error": "username already exists"}), 409
+        user.username = username
     if "email" in data:
-        user.email = data["email"].strip()
+        email = str(data["email"] or "").strip()
+        if not email:
+            return jsonify({"error": "email cannot be empty"}), 400
+        if User.select().where((User.email == email) & (User.id != user_id)).exists():
+            return jsonify({"error": "email already exists"}), 409
+        user.email = email
 
-    user.save()
+    try:
+        with database_proxy.atomic():
+            user.save()
+    except IntegrityError:
+        return jsonify({"error": "username or email already exists"}), 409
     logger.info("User updated", extra={"user_id": user_id})
     return jsonify(_user_to_dict(user))
 
@@ -94,7 +110,11 @@ def delete_user(user_id):
     except User.DoesNotExist:
         return jsonify({"error": "User not found"}), 404
 
-    user.delete_instance()
+    try:
+        with database_proxy.atomic():
+            user.delete_instance()
+    except IntegrityError:
+        return jsonify({"error": "User still owns links or events and cannot be deleted"}), 409
     logger.info("User deleted", extra={"user_id": user_id})
     return jsonify({"message": "User deleted"}), 200
 

@@ -143,3 +143,60 @@ def test_redirect_cache_hit_records_click(client, sample_url):
     assert response.headers["Location"] == sample_url.original_url
     stats = client.get(f"/stats/{sample_url.short_code}").get_json()
     assert stats["click_count"] == 1
+
+
+def test_update_rejects_non_http_url(client, sample_url):
+    response = client.put(f"/urls/{sample_url.id}", json={"original_url": "javascript:alert(1)"})
+    assert response.status_code == 400
+    assert client.get(f"/urls/{sample_url.id}").get_json()["original_url"] == "https://example.com"
+
+
+def test_update_accepts_https_url(client, sample_url):
+    response = client.put(f"/urls/{sample_url.id}", json={"original_url": " https://example.com/new "})
+    assert response.status_code == 200
+    assert response.get_json()["original_url"] == "https://example.com/new"
+
+
+def test_rename_user_to_taken_username_returns_409(client, sample_user):
+    from app.models.user import User
+    other = User.create(username="other", email="other@example.com")
+    response = client.put(f"/users/{other.id}", json={"username": "testuser"})
+    assert response.status_code == 409
+    assert User.get_by_id(other.id).username == "other"
+
+
+def test_rename_user_to_own_username_is_allowed(client, sample_user):
+    response = client.put(f"/users/{sample_user.id}", json={"username": "testuser", "email": "test@example.com"})
+    assert response.status_code == 200
+
+
+def test_update_user_race_on_unique_returns_409(client, sample_user, monkeypatch):
+    from peewee import IntegrityError
+    from app.models.user import User
+
+    def fail(*args, **kwargs):
+        raise IntegrityError("duplicate key")
+
+    monkeypatch.setattr(User, "save", fail)
+    response = client.put(f"/users/{sample_user.id}", json={"username": "fresh"})
+    assert response.status_code == 409
+
+
+def test_delete_user_with_links_returns_409(client, sample_url, monkeypatch):
+    from peewee import IntegrityError
+    from app.models.user import User
+
+    def fail(*args, **kwargs):
+        raise IntegrityError("violates foreign key constraint")
+
+    monkeypatch.setattr(User, "delete_instance", fail)
+    response = client.delete(f"/users/{sample_url.user_id}")
+    assert response.status_code == 409
+
+
+def test_delete_user_without_links(client):
+    from app.models.user import User
+    user = User.create(username="lonely", email="lonely@example.com")
+    response = client.delete(f"/users/{user.id}")
+    assert response.status_code == 200
+    assert not User.select().where(User.id == user.id).exists()
