@@ -1,7 +1,7 @@
 import logging
 from flask import Blueprint, jsonify
 from app.database import database_proxy
-from app.cache import get_cache
+from app.cache import cache_ping
 
 logger = logging.getLogger(__name__)
 health_bp = Blueprint("health", __name__)
@@ -17,8 +17,7 @@ def health():
         db_status = "error"
 
     try:
-        cache = get_cache()
-        cache_status = "ok" if cache is not None else "unavailable"
+        cache_status = "ok" if cache_ping() else "unavailable"
     except Exception as e:
         logger.error("Cache health check failed", extra={"error": str(e)})
         cache_status = "error"
