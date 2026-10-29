@@ -12,7 +12,7 @@ from app.cache import cache_delete, cache_get, cache_set, redirect_cache_key
 from app.models.event import Event
 from app.models.url import Url
 from app.models.user import User
-from app.routes.metrics import TOTAL_REDIRECTS
+from app.routes.metrics import CACHE_LOOKUPS, TOTAL_REDIRECTS
 
 logger = logging.getLogger(__name__)
 urls_bp = Blueprint("urls", __name__)
@@ -96,14 +96,24 @@ def redirect_url(short_code):
     cache_key = redirect_cache_key(short_code)
     cached = cache_get(cache_key)
     if cached is not None:
+        CACHE_LOOKUPS.labels("redirect", "hit").inc()
         if cached == "INACTIVE":
             return jsonify({"error": "URL is no longer active"}), 410
         if cached == "NOT_FOUND":
             return jsonify({"error": "URL not found"}), 404
+        target = json.loads(cached)
+        Event.create(
+            url=target["id"],
+            user=None,
+            event_type="clicked",
+            timestamp=datetime.now(),
+            details=json.dumps({"short_code": short_code}),
+        )
         TOTAL_REDIRECTS.inc()
-        logger.info("URL redirected (cache hit)", extra={"short_code": short_code, "destination": cached})
-        return redirect(cached, code=302)
+        logger.info("URL redirected (cache hit)", extra={"short_code": short_code, "destination": target["url"]})
+        return redirect(target["url"], code=302)
 
+    CACHE_LOOKUPS.labels("redirect", "miss").inc()
     try:
         url = Url.get(Url.short_code == short_code)
     except Url.DoesNotExist:
@@ -115,7 +125,7 @@ def redirect_url(short_code):
         cache_set(cache_key, "INACTIVE", ttl=60)
         return jsonify({"error": "URL is no longer active"}), 410
 
-    cache_set(cache_key, url.original_url)
+    cache_set(cache_key, json.dumps({"id": url.id, "url": url.original_url}))
 
     Event.create(
         url=url,
@@ -174,8 +184,10 @@ def list_urls():
     cache_key = f"url:list:{page}:{per_page}:{user_id}:{is_active}"
     cached = cache_get(cache_key)
     if cached is not None:
+        CACHE_LOOKUPS.labels("list", "hit").inc()
         from flask import Response
         return Response(cached, status=200, mimetype="application/json")
+    CACHE_LOOKUPS.labels("list", "miss").inc()
 
     query = Url.select().order_by(Url.created_at.desc())
 

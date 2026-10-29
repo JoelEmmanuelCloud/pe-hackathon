@@ -71,4 +71,4 @@ def cache_delete(key: str):
 
 
 def redirect_cache_key(short_code: str) -> str:
-    return f"url:redirect:{short_code}"
+    return f"url:redirect:v2:{short_code}"
