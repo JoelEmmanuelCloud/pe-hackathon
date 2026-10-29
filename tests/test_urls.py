@@ -143,3 +143,15 @@ def test_redirect_cache_hit_records_click(client, sample_url):
     assert response.headers["Location"] == sample_url.original_url
     stats = client.get(f"/stats/{sample_url.short_code}").get_json()
     assert stats["click_count"] == 1
+
+
+def test_update_rejects_non_http_url(client, sample_url):
+    response = client.put(f"/urls/{sample_url.id}", json={"original_url": "javascript:alert(1)"})
+    assert response.status_code == 400
+    assert client.get(f"/urls/{sample_url.id}").get_json()["original_url"] == "https://example.com"
+
+
+def test_update_accepts_https_url(client, sample_url):
+    response = client.put(f"/urls/{sample_url.id}", json={"original_url": " https://example.com/new "})
+    assert response.status_code == 200
+    assert response.get_json()["original_url"] == "https://example.com/new"

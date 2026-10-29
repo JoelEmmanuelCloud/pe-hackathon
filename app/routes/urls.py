@@ -156,12 +156,15 @@ def update_url(url_id):
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
 
+    if "original_url" in data:
+        original_url = str(data["original_url"] or "").strip()
+        if not original_url.startswith(("http://", "https://")):
+            return jsonify({"error": "original_url must start with http:// or https://"}), 400
+        url.original_url = original_url
     if "title" in data:
         url.title = data["title"]
     if "is_active" in data:
         url.is_active = bool(data["is_active"])
-    if "original_url" in data:
-        url.original_url = data["original_url"]
 
     url.updated_at = datetime.now()
     url.save()
