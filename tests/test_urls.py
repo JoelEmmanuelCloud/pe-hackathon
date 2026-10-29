@@ -130,3 +130,16 @@ def test_metrics_records_requests(client, sample_url):
     assert 'http_requests_total{endpoint="/<short_code>",method="GET",status="302"}' in body
     assert 'http_request_duration_seconds_count{endpoint="/<short_code>",method="GET"}' in body
     assert 'cache_lookups_total{cache="redirect",result="miss"}' in body
+
+
+def test_redirect_cache_hit_records_click(client, sample_url):
+    import json
+    from unittest.mock import patch
+
+    cached = json.dumps({"id": sample_url.id, "url": sample_url.original_url})
+    with patch("app.routes.urls.cache_get", return_value=cached):
+        response = client.get(f"/{sample_url.short_code}")
+    assert response.status_code == 302
+    assert response.headers["Location"] == sample_url.original_url
+    stats = client.get(f"/stats/{sample_url.short_code}").get_json()
+    assert stats["click_count"] == 1

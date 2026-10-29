@@ -101,9 +101,17 @@ def redirect_url(short_code):
             return jsonify({"error": "URL is no longer active"}), 410
         if cached == "NOT_FOUND":
             return jsonify({"error": "URL not found"}), 404
+        target = json.loads(cached)
+        Event.create(
+            url=target["id"],
+            user=None,
+            event_type="clicked",
+            timestamp=datetime.now(),
+            details=json.dumps({"short_code": short_code}),
+        )
         TOTAL_REDIRECTS.inc()
-        logger.info("URL redirected (cache hit)", extra={"short_code": short_code, "destination": cached})
-        return redirect(cached, code=302)
+        logger.info("URL redirected (cache hit)", extra={"short_code": short_code, "destination": target["url"]})
+        return redirect(target["url"], code=302)
 
     CACHE_LOOKUPS.labels("redirect", "miss").inc()
     try:
@@ -117,7 +125,7 @@ def redirect_url(short_code):
         cache_set(cache_key, "INACTIVE", ttl=60)
         return jsonify({"error": "URL is no longer active"}), 410
 
-    cache_set(cache_key, url.original_url)
+    cache_set(cache_key, json.dumps({"id": url.id, "url": url.original_url}))
 
     Event.create(
         url=url,
