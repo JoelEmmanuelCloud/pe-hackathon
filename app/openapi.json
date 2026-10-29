@@ -166,7 +166,8 @@
         "responses": {
           "200": {"description": "Updated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}},
           "400": {"$ref": "#/components/responses/BadRequest"},
-          "404": {"$ref": "#/components/responses/NotFound"}
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"description": "Username or email belongs to another user", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
         }
       },
       "delete": {
@@ -174,7 +175,8 @@
         "summary": "Delete a user",
         "responses": {
           "200": {"description": "Deleted", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Message"}}}},
-          "404": {"$ref": "#/components/responses/NotFound"}
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"description": "User still owns links or events", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
         }
       }
     },
