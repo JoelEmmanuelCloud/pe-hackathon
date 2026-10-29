@@ -1,6 +1,7 @@
 import logging
 import os
-from flask import Flask
+from flask import Flask, jsonify
+from peewee import OperationalError
 from pythonjsonlogger import json as jsonlogger
 from dotenv import load_dotenv
 
@@ -25,10 +26,10 @@ def create_app(db=None):
         db = get_db()
     database_proxy.initialize(db)
 
-    @app.before_request
-    def connect_db():
-        if db.is_closed():
-            db.connect()
+    @app.errorhandler(OperationalError)
+    def database_unavailable(exc):
+        app.logger.error("Database unavailable", extra={"error": str(exc)})
+        return jsonify({"error": "database unavailable"}), 503
 
     @app.teardown_appcontext
     def close_db(exc):

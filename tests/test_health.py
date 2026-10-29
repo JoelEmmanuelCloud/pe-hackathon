@@ -42,3 +42,30 @@ def test_health_reports_cache_unavailable(client, monkeypatch):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.get_json()["cache"] == "unavailable"
+
+
+def test_health_returns_503_when_db_down(client, monkeypatch):
+    from peewee import OperationalError
+    from app.database import database_proxy
+
+    def fail(*args, **kwargs):
+        raise OperationalError("connection refused")
+
+    with monkeypatch.context() as m:
+        m.setattr(database_proxy.obj, "execute_sql", fail)
+        response = client.get("/health")
+    assert response.status_code == 503
+    assert response.get_json()["db"] == "error"
+
+
+def test_db_outage_returns_503_json(client, monkeypatch):
+    from peewee import OperationalError
+    from app.models.url import Url
+
+    def fail(*args, **kwargs):
+        raise OperationalError("connection refused")
+
+    monkeypatch.setattr(Url, "get_by_id", fail)
+    response = client.get("/urls/1")
+    assert response.status_code == 503
+    assert response.get_json() == {"error": "database unavailable"}
